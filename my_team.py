@@ -1,33 +1,14 @@
-# my_team.py
-# Eutopia Pacman Contest agent.
-#
-# Two weighted-feature reflex agents that can switch between 'offense' and
-# 'defense' depending on the score and the time left.
-#
-#  Offense : dead-end avoidance, ghost-aware route home, food near our border
-#            first, power capsules, banks food before it gets lost.
-#  Defense : tracks invaders (seen, or inferred from food that disappeared)
-#            and patrols near the border when nothing is visible.
-#  Strategy: both agents attack early. The more we lead, the more defensive
-#            we become (see the LEAD_* constants below).
-
 import random
 
 try:
-    # Same import style as baseline_team.py (running from src/contest)
     import util
     from capture_agents import CaptureAgent
     from game import Directions
 except ImportError:
-    # Package-style imports, in case your repo template uses them
     import contest.util as util
     from contest.capture_agents import CaptureAgent
     from contest.game import Directions
 
-
-#################
-# Team creation #
-#################
 
 def create_team(first_index, second_index, is_red,
                 first='OffensiveAgent', second='DefensiveAgent', num_training=0):
@@ -35,15 +16,9 @@ def create_team(first_index, second_index, is_red,
     return [eval(first)(first_index), eval(second)(second_index)]
 
 
-###########
-# Helpers #
-###########
-
-# Information shared by our two agents: team colour -> last known invader
 TRACK = {}
 
-# Set DEBUG = True to print each decision of the listed agents (for testing
-# only, and switch it off before submitting). Indices: red 0 and 2, blue 1 and 3.
+
 DEBUG = False
 DEBUG_AGENTS = (0, 2)
 
@@ -101,39 +76,27 @@ DEFENSE_WEIGHTS = {
 }
 
 
-##########
-# Agents #
-##########
 
 class BaseAgent(CaptureAgent):
     """Shared logic. Subclasses only decide the default role."""
 
-    # --- offense tuning ---
-    CARRY_LIMIT = 5               # head home once carrying this much food
-    GHOST_RANGE = 4               # react to ghosts closer than this
-    HOME_BIAS = 0.5               # prefer food that is close to our border
+    
+    CARRY_LIMIT = 5               
+    GHOST_RANGE = 4               
+    HOME_BIAS = 0.5               
 
-    # --- strategy tuning (the score is from OUR point of view) ---
-    LEAD_SAFE = 3                 # 2nd agent stays home once we lead by this much
-    LEAD_DEFEND_ALL = 6           # BOTH agents defend once we lead by this much...
-    LEAD_DEFEND_ALL_LATE = 3      # ...or by this much in the late game
-    LATE_MOVES = 120              # "late" = this few moves left per agent
-    TRAILING_ATTACK = 2           # 2nd agent goes all-out if trailing by this
-                                  # much in the late game
-
-    # --- stalemate breaking ---
-    # If the score has not changed for STALL_START moves (and we are not
-    # leading), ghost fear is scaled down over the next STALL_RAMP moves,
-    # down to MIN_CAUTION of its normal strength.
+    
+    LEAD_SAFE = 3                 
+    LEAD_DEFEND_ALL = 6           
+    LEAD_DEFEND_ALL_LATE = 3      
+    LATE_MOVES = 120              
+    TRAILING_ATTACK = 2           
+                                  
     STALL_START = 60
     STALL_RAMP = 40
     MIN_CAUTION = 0.0
-
-    # --- spreading out ---
-    ZONE_PENALTY = 6              # extra "distance" for food outside our half
-
-    # --- defense tuning ---
-    TRACK_FRESH = 12              # how long (in moves) an invader hint stays valid
+    ZONE_PENALTY = 6              
+    TRACK_FRESH = 12              
 
     def register_initial_state(self, game_state):
         self.start = game_state.get_agent_position(self.index)
@@ -150,18 +113,15 @@ class BaseAgent(CaptureAgent):
         TRACK.pop(self.red, None)
 
         walls = game_state.get_walls()
-        # Squares on our side of the border: reaching one banks the food
         border_x = walls.width // 2 - 1 if self.red else walls.width // 2
         self.home_border = [(border_x, y) for y in range(walls.height)
                             if not walls[border_x][y]]
         self.dead_ends = compute_dead_ends(walls)
 
-        # Spread out: one agent prefers the top half, the other the bottom half
         self.map_height = walls.height
         team = sorted(self.get_team(game_state))
         self.zone_upper = (self.index == team[0])
 
-    # ---------- helpers ----------
 
     def distance_to_home(self, pos):
         """Maze distance from pos to the nearest square on our side."""
@@ -192,11 +152,11 @@ class BaseAgent(CaptureAgent):
         food_left = len(self.get_food(game_state).as_list())
         time_is_short = self.moves_left(game_state) <= self.distance_to_home(my_pos) + 8
 
-        if (me.num_carrying >= self.CARRY_LIMIT   # carrying enough
-                or threat                         # a ghost is close
-                or food_left <= 2                 # game is nearly won
-                or time_is_short                  # not enough time left
-                or self.protect_lead):            # we lead: secure the points
+        if (me.num_carrying >= self.CARRY_LIMIT  
+                or threat                         
+                or food_left <= 2                 
+                or time_is_short                  
+                or self.protect_lead):            
             self.returning = True
 
     def pick_home_goal(self, game_state):
@@ -215,10 +175,10 @@ class BaseAgent(CaptureAgent):
             d = self.get_maze_distance(my_pos, b)
             cost = d
             for g in ghosts:
-                margin = self.get_maze_distance(g, b) - d   # how much sooner we get there
+                margin = self.get_maze_distance(g, b) - d   
                 cost += 2 * max(0, 3 - margin)
             if b == self.home_goal:
-                cost -= 3                                   # stickiness
+                cost -= 3                                   
             if best is None or cost < best_cost:
                 best, best_cost = b, cost
         return best
@@ -266,7 +226,6 @@ class BaseAgent(CaptureAgent):
         return (new == self.start and cur != self.start
                 and self.get_maze_distance(cur, new) > 1)
 
-    # ---------- invader tracking (shared by both agents) ----------
 
     def update_tracking(self, game_state):
         now = self.moves_left(game_state)
@@ -279,7 +238,7 @@ class BaseAgent(CaptureAgent):
                                           key=lambda p: self.get_maze_distance(my_pos, p)),
                                'time': now}
 
-        # Food that disappeared since our last turn was eaten by an invader
+        
         food = set(self.get_food_you_are_defending(game_state).as_list())
         if self.prev_def_food is not None and not invaders:
             eaten = self.prev_def_food - food
@@ -300,14 +259,13 @@ class BaseAgent(CaptureAgent):
         food = self.get_food_you_are_defending(game_state).as_list()
         if not food:
             return None
-        # Each defender covers its own half (top/bottom) so they don't stack
+        
         mine = [f for f in food if self.in_my_zone(f)]
         pool = mine if mine else food
         pool.sort(key=lambda f: self.distance_to_home(f))
         points = pool[:3]
         return points[(self.moves_left(game_state) // 8) % len(points)]
 
-    # ---------- decision ----------
 
     def choose_action(self, game_state):
         lead = self.get_score(game_state)
@@ -315,7 +273,6 @@ class BaseAgent(CaptureAgent):
         needed = self.LEAD_DEFEND_ALL_LATE if late else self.LEAD_DEFEND_ALL
         self.protect_lead = lead >= needed
 
-        # Stalemate breaker: the longer nothing is scored, the less we fear ghosts
         now = self.moves_left(game_state)
         if lead != self.last_score:
             self.last_score = lead
@@ -329,10 +286,8 @@ class BaseAgent(CaptureAgent):
         self.update_tracking(game_state)
         self.role = self.choose_role(game_state)
 
-        # Decide once per turn whether to run home (see update_returning)
         self.update_returning(game_state)
 
-        # One fixed home target per decision (forgotten once the food is banked)
         if game_state.get_agent_state(self.index).num_carrying > 0:
             self.home_goal = self.pick_home_goal(game_state)
         else:
@@ -357,7 +312,6 @@ class BaseAgent(CaptureAgent):
         successor = game_state.generate_successor(self.index, action)
         pos = successor.get_agent_state(self.index).get_position()
         if pos != util.nearest_point(pos):
-            # Only half a grid step was taken, so apply the action again
             return successor.generate_successor(self.index, action)
         return successor
 
@@ -374,8 +328,6 @@ class BaseAgent(CaptureAgent):
     def get_weights(self, game_state, action):
         return DEFENSE_WEIGHTS if self.role == 'defense' else OFFENSE_WEIGHTS
 
-    # ---------- offense ----------
-
     def offensive_features(self, game_state, action):
         features = util.Counter()
         successor = self.get_successor(game_state, action)
@@ -389,7 +341,6 @@ class BaseAgent(CaptureAgent):
         food_list = self.get_food(successor).as_list()
         features['food_left'] = -len(food_list)
 
-        # Visible enemy ghosts that are dangerous (not scared)
         enemies = [successor.get_agent_state(i) for i in self.get_opponents(successor)]
         ghosts = [e for e in enemies
                   if not e.is_pacman and e.get_position() is not None and e.scared_timer <= 1]
@@ -398,18 +349,14 @@ class BaseAgent(CaptureAgent):
         ghost_dist = None
         if my_state.is_pacman and ghost_positions:
             ghost_dist = min(self.get_maze_distance(my_pos, g) for g in ghost_positions)
-            # All three are scaled by self.caution (1.0 normally, lower when the
-            # game is stuck). Being eaten ('died') is never scaled down.
             if ghost_dist < self.GHOST_RANGE:
                 features['ghost_near'] = (self.GHOST_RANGE - ghost_dist) * self.caution
             if ghost_dist <= 1:
                 features['ghost_adjacent'] = self.caution
             if my_pos in self.dead_ends and ghost_dist <= self.GHOST_RANGE + 3:
-                features['dead_end'] = self.caution   # a CLOSE ghost + dead end = trap
+                features['dead_end'] = self.caution   
 
-        # Decided ONCE per turn in update_returning(), from the current state.
-        # (If it were decided per candidate move, the move that crosses the
-        # border would be judged differently from the others and look worse.)
+        
         go_home = self.returning
 
         if go_home:
@@ -418,14 +365,12 @@ class BaseAgent(CaptureAgent):
                                             if goal is not None
                                             else self.distance_to_home(my_pos))
             if not my_state.is_pacman and not died:
-                features['banked'] = 1  # this move crosses the border and banks the food
+                features['banked'] = 1  
         elif self.chased_to_capsule(successor, my_pos, ghost_dist):
-            # A ghost is right behind us and a capsule is close: grab it
+            
             features['distance_to_capsule'] = min(
                 self.get_maze_distance(my_pos, c) for c in self.enemy_capsules(successor))
         elif food_list:
-            # Prefer food that is close to us, close to our border, and in OUR
-            # half of the map (the two attackers then use different entrances)
             features['distance_to_food'] = min(
                 self.get_maze_distance(my_pos, f)
                 + self.HOME_BIAS * self.food_home_distance(f)
@@ -439,7 +384,7 @@ class BaseAgent(CaptureAgent):
             features['reverse'] = 1
         return features
 
-    # ---------- defense ----------
+   
 
     def defensive_features(self, game_state, action):
         features = util.Counter()
@@ -450,7 +395,7 @@ class BaseAgent(CaptureAgent):
         if self.would_die(game_state, successor):
             features['died'] = 1
 
-        # Stay on defense (be a ghost, not a Pacman)
+        
         features['on_defense'] = 0 if my_state.is_pacman else 1
 
         invaders = self.visible_invaders(successor)
@@ -461,7 +406,7 @@ class BaseAgent(CaptureAgent):
             d = min(self.get_maze_distance(my_pos, util.nearest_point(e.get_position()))
                     for e in invaders)
             if scared:
-                features['scared_invader_distance'] = min(d, 4)   # keep away while scared
+                features['scared_invader_distance'] = min(d, 4)   
             else:
                 features['invader_distance'] = d
         else:
@@ -486,7 +431,7 @@ class OffensiveAgent(BaseAgent):
 
     def choose_role(self, game_state):
         carrying = game_state.get_agent_state(self.index).num_carrying
-        # Bank any carried food first, then defend if we lead enough
+        
         if carrying == 0 and self.protect_lead:
             return 'defense'
         return 'offense'
@@ -505,9 +450,9 @@ class DefensiveAgent(BaseAgent):
         if self.visible_invaders(game_state):
             return 'defense'
         if late and lead <= -self.TRAILING_ATTACK:
-            return 'offense'                 # all-out attack when trailing late
+            return 'offense'                 
         if self.tracked_target(game_state) is not None:
-            return 'defense'                 # recent sign of an invader
+            return 'defense'                 
         if lead >= self.LEAD_SAFE:
             return 'defense'
         return 'offense'
